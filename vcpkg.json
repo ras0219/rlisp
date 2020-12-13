@@ -2,5 +2,12 @@
   "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg/a5a3e89ec4a1acc1902bb08d5ebedec389dde7fe/scripts/vcpkg.schema.json",
   "name": "rlisp",
   "version-string": "1.0.0",
-  "dependencies": [ "vcpkg-base" ]
+  "dependencies": [ "vcpkg-base", "argparse" ],
+  "features": [
+    {
+      "name": "test",
+      "dependencies": [ "gtest" ],
+      "description": "build tests"
+    }
+  ]
 }
