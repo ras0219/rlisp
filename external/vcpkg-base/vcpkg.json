@@ -1,0 +1,6 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg/a5a3e89ec4a1acc1902bb08d5ebedec389dde7fe/scripts/vcpkg.schema.json",
+  "name": "vcpkg-base",
+  "version-string": "2020-12-12",
+  "description": "Base library extracted from the vcpkg source code"
+}
