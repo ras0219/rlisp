@@ -30,7 +30,7 @@ namespace rlisp
         size_t m_cells_size;
         std::unique_ptr<Cons[]> m_cells;
         std::unordered_map<std::string, Cons> atoms;
-        Cons m_nil{atom_tag, nullptr};
+        Cons m_nil{0, nullptr};
         std::string m_nil_str;
         int cur_value = 0;
         std::vector<Cons*> m_roots;

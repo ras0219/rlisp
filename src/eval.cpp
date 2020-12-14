@@ -7,7 +7,7 @@ using namespace rlisp;
 
 static Cons* single_arg(Cons* e, MemPool& pool)
 {
-    if (e->is_atom() || e->cdr != pool.nil()) return nullptr;
+    if (!e->is_cons() || e->cdr != pool.nil()) return nullptr;
     return e->car;
 }
 
@@ -31,6 +31,88 @@ private:
     MemPool& pool;
 };
 
+static Cons* eval2(Cons* e, Cons* scope, MemPool& pool);
+
+static Cons* builtin_cond(Cons* e, Cons* scope, MemPool& pool)
+{
+    auto case_list = e->cdr;
+    do
+    {
+        if (!case_list->is_cons()) return nullptr;
+
+        auto cur_case = case_list->car;
+        case_list = case_list->cdr;
+
+        if (!cur_case->is_cons()) return nullptr;
+        if (!cur_case->cdr->is_cons()) return nullptr;
+        if (cur_case->cdr->cdr != pool.nil()) return nullptr;
+
+        auto ea = eval2(cur_case->car, scope, pool);
+        if (ea == nullptr) return nullptr;
+        if (ea == pool.nil()) continue;
+        return eval2(cur_case->cdr->car, scope, pool);
+    } while (true);
+}
+
+static Cons* builtin_cons(Cons* e, Cons* scope, MemPool& pool)
+{
+    if (!e->cdr->is_cons()) return nullptr;
+    if (!e->cdr->cdr->is_cons()) return nullptr;
+    if (e->cdr->cdr->cdr != pool.nil()) return nullptr;
+    auto a1 = eval2(e->cdr->car, scope, pool);
+    if (a1 == nullptr) return nullptr;
+    pool.push_root(a1);
+    auto a2 = eval2(e->cdr->cdr->car, scope, pool);
+    pool.pop_root();
+    if (a2 == nullptr) return nullptr;
+    return pool.alloc(a1, a2);
+}
+
+static Cons* builtin_eq(Cons* e, Cons* scope, MemPool& pool)
+{
+    if (!e->cdr->is_cons()) return nullptr;
+    if (!e->cdr->cdr->is_cons()) return nullptr;
+    if (e->cdr->cdr->cdr != pool.nil()) return nullptr;
+    auto a1 = eval2(e->cdr->car, scope, pool);
+    if (a1 == nullptr) return nullptr;
+    pool.push_root(a1);
+    auto a2 = eval2(e->cdr->cdr->car, scope, pool);
+    pool.pop_root();
+    if (a2 == nullptr) return nullptr;
+    return a1 == a2 ? pool.intern_atom("t") : pool.nil();
+}
+
+static Cons* builtin_lambda(Cons* e, Cons*, MemPool& pool)
+{
+    auto closure = pool.intern_atom("closure");
+    if (closure == nullptr) return nullptr;
+    return pool.alloc(closure, e->cdr);
+}
+
+static Cons* builtin_quote(Cons* e, Cons*, MemPool& pool) { return single_arg(e->cdr, pool); }
+
+static Cons* builtin_car(Cons* e, Cons* scope, MemPool& pool)
+{
+    if (auto a = single_arg_eval(e->cdr, pool))
+    {
+        if (a == pool.nil()) return a;
+        if (!a->is_cons()) return nullptr;
+        return a->car;
+    }
+    return nullptr;
+}
+
+static Cons* builtin_cdr(Cons* e, Cons* scope, MemPool& pool)
+{
+    if (auto a = single_arg_eval(e->cdr, pool))
+    {
+        if (a == pool.nil()) return a;
+        if (!a->is_cons()) return nullptr;
+        return a->cdr;
+    }
+    return nullptr;
+}
+
 // assume scope is pinned; e is not pinned
 static Cons* eval2(Cons* e, Cons* scope, MemPool& pool)
 {
@@ -41,84 +123,28 @@ static Cons* eval2(Cons* e, Cons* scope, MemPool& pool)
             return e;
         else
         {
-            while (!scope->is_atom())
+            while (scope->is_cons())
             {
-                if (scope->car->is_atom()) return nullptr;
+                if (!scope->car->is_cons()) return nullptr;
                 if (scope->car->car == e) return scope->car->cdr;
                 scope = scope->cdr;
             }
             return nullptr;
         }
     }
-
-    ScopedPin pin(e, pool);
-
-    if (e->car->is_atom())
+    else if (e->is_cons())
     {
-        auto& s = *e->car->atom;
-        if (s == "cons" || s == "eq")
-        {
-            if (e->cdr->is_atom()) return nullptr;
-            if (e->cdr->cdr->is_atom()) return nullptr;
-            if (e->cdr->cdr->cdr != pool.nil()) return nullptr;
-            auto a1 = eval2(e->cdr->car, scope, pool);
-            pool.push_root(a1);
-            auto a2 = eval2(e->cdr->cdr->car, scope, pool);
-            pool.pop_root();
-            if (s == "cons")
-                return pool.alloc(a1, a2);
-            else if (s == "eq")
-                return a1 == a2 ? pool.intern_atom("t") : pool.nil();
-        }
-        else if (s == "lambda")
-        {
-            return pool.alloc(pool.intern_atom("closure"), e->cdr);
-        }
-        else if (s == "cond")
-        {
-            auto case_list = e->cdr;
-            do
-            {
-                if (case_list->is_atom()) return nullptr;
-
-                auto cur_case = case_list->car;
-                case_list = case_list->cdr;
-
-                if (cur_case->is_atom()) return nullptr;
-                if (cur_case->cdr->is_atom()) return nullptr;
-                if (cur_case->cdr->cdr != pool.nil()) return nullptr;
-
-                auto ea = eval2(cur_case->car, scope, pool);
-                if (ea == nullptr) return nullptr;
-                if (ea == pool.nil()) continue;
-                return eval2(cur_case->cdr->car, scope, pool);
-            } while (true);
-        }
-        else if (s == "quote")
-        {
-            return single_arg(e->cdr, pool);
-        }
-        else if (s == "car" || s == "cdr")
-        {
-            if (auto a = single_arg_eval(e->cdr, pool))
-            {
-                if (a == pool.nil()) return a;
-                if (a->is_atom()) return nullptr;
-                if (s == "car")
-                    return a->car;
-                else if (s == "cdr")
-                    return a->cdr;
-            }
-        }
-        return nullptr;
-    }
-    else
-    {
+        ScopedPin pin(e, pool);
         auto func = eval2(e->car, scope, pool);
+        if (func == nullptr) return nullptr;
 
-        if (func->is_atom())
+        if (func->is_builtin())
         {
-            // atoms are not function objects
+            return func->builtin(e, scope, pool);
+        }
+        else if (!func->is_cons())
+        {
+            // only cons's can be function objects
             return nullptr;
         }
         else if (func->car->is_atom("closure"))
@@ -126,8 +152,8 @@ static Cons* eval2(Cons* e, Cons* scope, MemPool& pool)
             // closure object:
             // (closure (x y) (+ x y))
 
-            if (func->cdr->is_atom()) return nullptr;
-            if (func->cdr->cdr->is_atom()) return nullptr;
+            if (!func->cdr->is_cons()) return nullptr;
+            if (!func->cdr->cdr->is_cons()) return nullptr;
             if (func->cdr->cdr->cdr != pool.nil()) return nullptr;
             auto arglist = func->cdr->car;
             auto expr = func->cdr->cdr->car;
@@ -142,7 +168,7 @@ static Cons* eval2(Cons* e, Cons* scope, MemPool& pool)
                 {
                     return eval2(expr, newscope, pool);
                 }
-                else if (applylist->is_atom() || arglist->is_atom())
+                else if (!applylist->is_cons() || !arglist->is_cons())
                 {
                     return nullptr;
                 }
@@ -153,7 +179,12 @@ static Cons* eval2(Cons* e, Cons* scope, MemPool& pool)
                 else
                 {
                     // bind
-                    newscope = pool.alloc(pool.alloc(arglist->car, eval2(applylist->car, scope, pool)), newscope);
+                    auto ea = eval2(applylist->car, scope, pool);
+                    if (ea == nullptr) return nullptr;
+                    auto x = pool.alloc(arglist->car, ea);
+                    if (x == nullptr) return nullptr;
+                    newscope = pool.alloc(x, newscope);
+                    if (newscope == nullptr) return nullptr;
                     // replace pinned scope with newer scope
                     pool.pop_push_root(newscope);
 
@@ -164,6 +195,32 @@ static Cons* eval2(Cons* e, Cons* scope, MemPool& pool)
         }
         return nullptr;
     }
+    else
+        return nullptr;
 }
 
-Cons* rlisp::eval(Cons* e, MemPool& pool) { return eval2(e, pool.nil(), pool); }
+struct BuiltinCons
+{
+    BuiltinCons(std::string&& name, BuiltinFunc func, Cons* prev_scope, MemPool& pool)
+        : builtin{.car = (Cons*)1, .builtin = func}
+        , scope_entry{pool.intern_atom(std::move(name)), &builtin}
+        , scope{&scope_entry, prev_scope}
+    {
+    }
+
+    Cons builtin;
+    Cons scope_entry;
+    Cons scope;
+};
+
+Cons* rlisp::eval(Cons* e, MemPool& pool)
+{
+    BuiltinCons l1("cond", &builtin_cond, pool.nil(), pool);
+    BuiltinCons l2("lambda", &builtin_lambda, &l1.scope, pool);
+    BuiltinCons l3("eq", &builtin_eq, &l2.scope, pool);
+    BuiltinCons l4("cons", &builtin_cons, &l3.scope, pool);
+    BuiltinCons l5("car", &builtin_car, &l4.scope, pool);
+    BuiltinCons l6("cdr", &builtin_cdr, &l5.scope, pool);
+    BuiltinCons l7("quote", &builtin_quote, &l6.scope, pool);
+    return eval2(e, &l7.scope, pool);
+}

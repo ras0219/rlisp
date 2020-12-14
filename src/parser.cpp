@@ -13,8 +13,8 @@ static void mark(Cons* c, std::vector<bool>& flags, Cons* pool_base)
         if (i < 0 || static_cast<size_t>(i) >= flags.size() || flags[i]) return;
         flags[i] = true;
 
-        // atoms are all separately allocated
-        if (c->car == atom_tag) abort();
+        // non-cons are all separately allocated
+        if (!c->is_cons()) abort();
         mark(c->car, flags, pool_base);
         c = c->cdr;
     } while (1);
@@ -89,7 +89,7 @@ Cons* MemPool::intern_atom(std::string sv)
 {
     if (sv == "nil") return nil();
 
-    auto [it, b] = atoms.emplace(std::move(sv), Cons{atom_tag, nullptr});
+    auto [it, b] = atoms.emplace(std::move(sv), Cons{0, nullptr});
     if (b)
     {
         it->second.atom = &it->first;

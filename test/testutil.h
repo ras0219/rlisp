@@ -5,7 +5,7 @@
 
 static bool expect_structural_eq(rlisp::Cons* c1, rlisp::Cons* c2, const char* file, unsigned long lineno)
 {
-    if (c1->car == rlisp::atom_tag && c2->car == rlisp::atom_tag)
+    if (c1->is_atom() && c2->is_atom())
     {
         if (c1->atom != c2->atom)
         {
@@ -13,10 +13,10 @@ static bool expect_structural_eq(rlisp::Cons* c1, rlisp::Cons* c2, const char* f
         }
         return c1->cdr == c2->cdr;
     }
-    else if (c1->car != rlisp::atom_tag && c2->car != rlisp::atom_tag)
+    else if (c1->is_cons() && c2->is_cons())
     {
         return expect_structural_eq(c1->car, c2->car, file, lineno) &&
-               expect_structural_eq(c1->car, c2->car, file, lineno);
+               expect_structural_eq(c1->cdr, c2->cdr, file, lineno);
     }
     else
     {
