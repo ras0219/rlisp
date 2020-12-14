@@ -20,6 +20,7 @@ namespace rlisp
 
         void push_root(Cons* a);
         void pop_root();
+        void pop_push_root(Cons* a);
 
         Cons* nil();
 

@@ -86,6 +86,9 @@ TEST(Eval, Eval)
     EXPECT_EVAL("(cond (nil 'b) (t 'c))", "c", mempool);
     EXPECT_EVAL("(cond ((eq 'a 'a) 'b) (t 'c))", "b", mempool);
 
+    EXPECT_EVAL("((lambda (a) a) ())", "()", mempool);
+    EXPECT_EVAL("((lambda (b) (cons b b)) ())", "(())", mempool);
+
     EXPECT_EQ(mempool.num_roots(), 0);
 }
 

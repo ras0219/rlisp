@@ -99,6 +99,7 @@ Cons* MemPool::intern_atom(std::string sv)
 
 void MemPool::push_root(Cons* a) { m_roots.push_back(a); }
 void MemPool::pop_root() { m_roots.pop_back(); }
+void MemPool::pop_push_root(Cons* a) { m_roots.back() = a; }
 
 Cons* parse_expr(vcpkg::Parse::ParserBase& parser, MemPool& pool);
 
