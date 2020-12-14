@@ -85,9 +85,44 @@ TEST(Eval, Eval)
     EXPECT_EVAL("(cond (t 'c))", "c", mempool);
     EXPECT_EVAL("(cond (nil 'b) (t 'c))", "c", mempool);
     EXPECT_EVAL("(cond ((eq 'a 'a) 'b) (t 'c))", "b", mempool);
+    EXPECT_EVAL("(cond ('(1) 'c))", "c", mempool);
+
+    EXPECT_EVAL("(let ((a nil) (b t)) b)", "t", mempool);
+    EXPECT_EVAL("(let ((a nil) (b (cons a a))) b)", "(nil)", mempool);
 
     EXPECT_EVAL("((lambda (a) a) ())", "()", mempool);
     EXPECT_EVAL("((lambda (b) (cons b b)) ())", "(())", mempool);
+    EXPECT_EVAL("(((lambda (b) (lambda (a) b)) t) nil)", "t", mempool);
+    EXPECT_EVAL("((lambda (a xs) xs) nil t)", "t", mempool);
+
+    EXPECT_EVAL(R"(
+    (let
+     ((a (lambda (xs) xs)))
+     (a t))
+    )",
+                "t",
+                mempool);
+
+    EXPECT_EVAL(R"(
+    (let
+     ((a (lambda (a xs) xs)))
+     (a a t))
+    )",
+                "t",
+                mempool);
+
+    // recursion
+    EXPECT_EVAL(R"(
+    (let
+     ((a (lambda
+          (a xs)
+          (cond
+           (xs (cons (a a (cdr xs)) (car xs)))
+           (t nil)))))
+     (a a '(1 2 3 4)))
+    )",
+                "((((() . 4) . 3) . 2) . 1)",
+                mempool);
 
     EXPECT_EQ(mempool.num_roots(), 0);
 }

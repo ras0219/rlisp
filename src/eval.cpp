@@ -82,35 +82,70 @@ static Cons* builtin_eq(Cons* e, Cons* scope, MemPool& pool)
     return a1 == a2 ? pool.intern_atom("t") : pool.nil();
 }
 
-static Cons* builtin_lambda(Cons* e, Cons*, MemPool& pool)
+static Cons* builtin_lambda(Cons* e, Cons* scope, MemPool& pool)
 {
     auto closure = pool.intern_atom("closure");
     if (closure == nullptr) return nullptr;
-    return pool.alloc(closure, e->cdr);
+    auto x = pool.alloc(scope, e->cdr);
+    if (x == nullptr) return nullptr;
+    return pool.alloc(closure, x);
+}
+
+static Cons* builtin_let(Cons* e, Cons* scope, MemPool& pool)
+{
+    // (let ((a b) (c d)) e)
+
+    if (!e->cdr->is_cons()) return nullptr;
+    if (!e->cdr->cdr->is_cons()) return nullptr;
+    if (e->cdr->cdr->cdr != pool.nil()) return nullptr;
+    auto pairs = e->cdr->car;
+    auto expr = e->cdr->cdr->car;
+
+    auto newscope = scope;
+    ScopedPin pin_scope(newscope, pool);
+    while (pairs->is_cons())
+    {
+        auto pair = pairs->car;
+        if (!pair->is_cons()) return nullptr;
+        if (!pair->cdr->is_cons()) return nullptr;
+        if (pair->cdr->cdr != pool.nil()) return nullptr;
+        auto ident = pair->car;
+        if (!ident->is_atom()) return nullptr;
+        auto ident_val = eval2(pair->cdr->car, newscope, pool);
+        if (!ident_val) return nullptr;
+        auto scope_entry = pool.alloc(ident, ident_val);
+        if (!scope_entry) return nullptr;
+        newscope = pool.alloc(scope_entry, newscope);
+        if (!newscope) return nullptr;
+        pool.pop_push_root(newscope);
+        pairs = pairs->cdr;
+    }
+    if (pairs != pool.nil()) return nullptr;
+    return eval2(expr, newscope, pool);
 }
 
 static Cons* builtin_quote(Cons* e, Cons*, MemPool& pool) { return single_arg(e->cdr, pool); }
 
+static Cons* builtin_car_cdr_common(Cons* e, Cons* scope, MemPool& pool)
+{
+    if (!e->cdr->is_cons()) return nullptr;
+    if (e->cdr->cdr != pool.nil()) return nullptr;
+
+    auto x = eval2(e->cdr->car, scope, pool);
+    if (!x || !x->is_cons()) return nullptr;
+    return x;
+}
+
 static Cons* builtin_car(Cons* e, Cons* scope, MemPool& pool)
 {
-    if (auto a = single_arg_eval(e->cdr, pool))
-    {
-        if (a == pool.nil()) return a;
-        if (!a->is_cons()) return nullptr;
-        return a->car;
-    }
-    return nullptr;
+    auto x = builtin_car_cdr_common(e, scope, pool);
+    return x ? x->car : nullptr;
 }
 
 static Cons* builtin_cdr(Cons* e, Cons* scope, MemPool& pool)
 {
-    if (auto a = single_arg_eval(e->cdr, pool))
-    {
-        if (a == pool.nil()) return a;
-        if (!a->is_cons()) return nullptr;
-        return a->cdr;
-    }
-    return nullptr;
+    auto x = builtin_car_cdr_common(e, scope, pool);
+    return x ? x->cdr : nullptr;
 }
 
 // assume scope is pinned; e is not pinned
@@ -150,16 +185,17 @@ static Cons* eval2(Cons* e, Cons* scope, MemPool& pool)
         else if (func->car->is_atom("closure"))
         {
             // closure object:
-            // (closure (x y) (+ x y))
+            // (closure (*scope*) (x y) (+ x y))
 
             if (!func->cdr->is_cons()) return nullptr;
             if (!func->cdr->cdr->is_cons()) return nullptr;
-            if (func->cdr->cdr->cdr != pool.nil()) return nullptr;
-            auto arglist = func->cdr->car;
-            auto expr = func->cdr->cdr->car;
+            if (!func->cdr->cdr->cdr->is_cons()) return nullptr;
+            if (func->cdr->cdr->cdr->cdr != pool.nil()) return nullptr;
+            auto newscope = func->cdr->car;
+            auto arglist = func->cdr->cdr->car;
+            auto expr = func->cdr->cdr->cdr->car;
             ScopedPin pin_func(func->cdr, pool);
 
-            auto newscope = scope;
             auto applylist = e->cdr;
             ScopedPin pin_newscope(newscope, pool);
             do
@@ -222,5 +258,6 @@ Cons* rlisp::eval(Cons* e, MemPool& pool)
     BuiltinCons l5("car", &builtin_car, &l4.scope, pool);
     BuiltinCons l6("cdr", &builtin_cdr, &l5.scope, pool);
     BuiltinCons l7("quote", &builtin_quote, &l6.scope, pool);
-    return eval2(e, &l7.scope, pool);
+    BuiltinCons l8("let", &builtin_let, &l7.scope, pool);
+    return eval2(e, &l8.scope, pool);
 }

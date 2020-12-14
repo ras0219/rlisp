@@ -185,7 +185,8 @@ static Cons* parse_expr(vcpkg::Parse::ParserBase& parser, MemPool& pool)
     }
     else
     {
-        auto sv = parser.match_until([](char32_t ch) { return ch == ')' || ch == ' '; });
+        auto sv = parser.match_until(
+            [](char32_t ch) { return ch == ')' || ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r'; });
         if (sv.size() == 0)
         {
             parser.add_error("expected expr");
